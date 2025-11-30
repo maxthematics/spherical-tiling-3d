@@ -16,6 +16,6 @@ The current focus is on **regular `{p,q}` tilings** (Platonic solids) on a spher
 ## Installation (dev)
 
 ```bash
-git clone https://github.com/<your-username>/spherical-tiling-3d.git
+git clone https://github.com/maxthematics/spherical-tiling-3d.git
 cd spherical-tiling-3d
 pip install -e .
