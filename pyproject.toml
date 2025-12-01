@@ -1,0 +1,29 @@
+#### 'pyproject.toml'
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spherical-tiling-3d"
+version = "0.0.1"
+description = "3D-printable spherical tilings (currently regular {p,q} tilings via Wythoff construction)."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Max Hoffmann" }
+]
+dependencies = [
+  "numpy",
+  "scipy",
+  # cadquery intentionally not hard-required; you can add it later or as extra
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "cadquery",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
