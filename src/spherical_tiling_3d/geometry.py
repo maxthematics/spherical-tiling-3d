@@ -1,7 +1,7 @@
 #### geometry.py
 
 import numpy as np
-
+from collections import defaultdict, Counter
 
 def reflect_point(point: np.ndarray, normal: np.ndarray) -> np.ndarray:
 	"""Reflect a point across a plane through the origin with given normal."""
@@ -13,9 +13,9 @@ def normalized_plane_key(
 	B: np.ndarray,
 	C: np.ndarray,
 	nd: int = 6,
-) -> Optional[Tuple[Tuple[float, float, float], float]]:
+) -> tuple[tuple[float, float, float], float] | None:
 	"""
-	Compute a normalized key representing the plane trough three points
+	Compute a normalized key representing the plane through three points
 	"""
 
 	A, B, C = map(lambda p: np.asarray(p, float), (A, B, C))
@@ -36,25 +36,25 @@ def normalized_plane_key(
 
 
 def group_triangles_by_plane(
-	points: List[np.ndarray] | np.ndarray,
+	points: list[np.ndarray] | np.ndarray,
 	triangles: np.ndarray,
 	nd: int = 6,
-) -> Dict[Tuple[Tuple[float, float, float], float], List[Tuple[int, int, int]]]:
+) -> dict[tuple[tuple[float, float, float], float], list[tuple[int, int, int]]]:
 	"""
-	Cluster triangles (givin by vertex indices) by the plane they lie in.
+	Cluster triangles (given by vertex indices) by the plane they lie in.
 	"""
-	planes: Dict[
-				Tuple[
-					Tuple[float, float, float],
+	planes: dict[
+				tuple[
+					tuple[float, float, float],
 					float
 				],
-				List[
-					Tuple[int, int, int]
+				list[
+					tuple[int, int, int]
 				]
 			] = defaultdict(list)
 	P = points
 
-	for (i, j, k) in triangle:
+	for (i, j, k) in triangles:
 		key = normalized_plane_key(P[i], P[j], P[k], nd=nd)
 		if key is not None:
 			planes[key].append((int(i), int(j), int(k)))
@@ -62,7 +62,9 @@ def group_triangles_by_plane(
 	return planes
 
 
-def boundary_polygon_from_triangles(tri_list):
+def boundary_polygon_from_triangles(
+	tri_list: list[tuple[int, int, int]]
+) -> list [int]:
 	"""
 	Given a set of coplanar triangles forming a convex patch, extract
 	the boundary vertex cycle.
@@ -75,8 +77,7 @@ def boundary_polygon_from_triangles(tri_list):
 
 	boundary_edges = [e for e, c in edge_counter.items() if c == 1]
 
-	from collections import defaultdict as dd
-	adjacency = dd(list)
+	adjacency: dict[int, list[int]] = defaultdict(list)
 	for a, b in boundary_edges:
 		adjacency[a].append(b)
 		adjacency[b].append(a)
