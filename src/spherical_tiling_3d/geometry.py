@@ -15,7 +15,7 @@ def normalized_plane_key(
 	nd: int = 6,
 ) -> tuple[tuple[float, float, float], float] | None:
 	"""
-	Compute a normalized key representing the plane through three points
+	Compute a normalized key representing the plane through three points.
 	"""
 
 	A, B, C = map(lambda p: np.asarray(p, float), (A, B, C))
@@ -64,7 +64,7 @@ def group_triangles_by_plane(
 
 def boundary_polygon_from_triangles(
 	tri_list: list[tuple[int, int, int]]
-) -> list [int]:
+) -> list[int]:
 	"""
 	Given a set of coplanar triangles forming a convex patch, extract
 	the boundary vertex cycle.
@@ -72,7 +72,7 @@ def boundary_polygon_from_triangles(
 	edge_counter = Counter()
 	for (i, j, k) in tri_list:
 		for a, b in ((i, j), (j, k), (k, i)):
-			e = (a,b) if a < b else (b, a)
+			e = (a, b) if a < b else (b, a)
 			edge_counter[e] += 1
 
 	boundary_edges = [e for e, c in edge_counter.items() if c == 1]
