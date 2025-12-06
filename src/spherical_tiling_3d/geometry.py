@@ -99,7 +99,3 @@ def boundary_polygon_from_triangles(
 
 	return loop
 
-
-
-
-
