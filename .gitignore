@@ -11,6 +11,9 @@ build/
 # pytest
 .pytest_cache/
 
+# generated examples
+examples/stl/
+
 # OS junk
 .DS_Store
 Thumbs.db

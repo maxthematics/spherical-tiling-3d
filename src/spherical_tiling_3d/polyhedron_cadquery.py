@@ -3,7 +3,7 @@
 import cadquery as cq
 import numpy as np
 
-from. wythoff import WythoffPoly, PolyhedronFace
+from. wythoff import WythoffPolyhedron, PolyhedronFace
 
 def _make_cq_face_from_polyhedron_face(
 	vertices: list[np.ndarray],
