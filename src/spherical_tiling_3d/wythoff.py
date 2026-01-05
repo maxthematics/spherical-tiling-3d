@@ -141,7 +141,32 @@ class WythoffPolyhedron:
 				adjacency[f2].add(f1)
 		self._face_adjacency = dict(adjacency)
 		return self._face_adjacency
-		
+
+
+	def color_faces_greedy(self) -> dict[int, int]:
+		"""
+		Assign colors to faces such that not two adjacent faces share a color.
+		Uses a greedy algorithm.
+		"""
+		adjacency = self.get_face_adjacency()
+		coloring: dict[int, int] = {}
+
+		for face in self.faces:
+			face_id = face.face_id
+			neighbor_colors = {
+				coloring[neighbor_id]
+				for neighbor_id in adjacency.get(face_id, set())
+				if neighbor_id in coloring
+			}
+
+			color = 0
+			while color in neighbor_colors:
+				color += 1
+
+			coloring[face_id] = color
+
+		return coloring
+
 
 	def build(self) -> "WythoffPolyhedron":
 		"""
