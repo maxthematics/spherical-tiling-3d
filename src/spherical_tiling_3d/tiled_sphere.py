@@ -25,6 +25,14 @@ class TiledSphere:
     
     Works with any convex polyhedron whose vertices lie on a circumsphere.
     """
+
+    DEFAULT_COLOR_PALETTE = [
+        (1.0, 0.0, 0.0),   # red
+        (0.0, 0.75, 0.0),  # green
+        (0.0, 0.0, 1.0),   # blue
+        (1.0, 1.0, 0.0),   # yellow
+
+    ]
     
     def __init__(self, polyhedron, radius: float, pyramid_scale: float = 4.0):
         """
@@ -97,7 +105,26 @@ class TiledSphere:
         
         return self
 
-    
+        
+    def apply_coloring(
+        self,
+        coloring: dict[int, int],
+        palette: list[tuple[float, float, float]] | None = None
+    ) -> "TiledSphere":
+        """
+        Apply a coloring to the tiles
+        """
+
+        if palette is None:
+            palette = self.DEFAULT_COLOR_PALETTE
+
+        for tile in self.tiles:
+            color_index = coloring.get(tile.tile_id, 0)
+            tile.color = palette[color_index % len(palette)]
+
+        return self
+
+
     def to_compound(self) -> cq.Compound:
         """
         Combine all tiles into a single compound (without color information).
@@ -116,11 +143,72 @@ class TiledSphere:
         """
         return [(tile.solid, tile.color) for tile in self.tiles]
 
-
-
-
-
-
+    
+    def group_by_color(self) -> dict[tuple[float, float, float], list[SphericalTile]]:
+        """
+        Group tiles by their color.
+        
+        Returns a dict mapping color tuples to lists of tiles.
+        """
+        groups: dict[tuple[float, float, float], list[SphericalTile]] = {}
+        
+        for tile in self.tiles:
+            if tile.color not in groups:
+                groups[tile.color] = []
+            groups[tile.color].append(tile)
+        
+        return groups
+    
+    def export_stl_by_color(
+        self, 
+        output_dir: str, 
+        base_name: str = "tile_color"
+    ) -> list[str]:
+        """
+        Export tiles grouped by color as separate STL files.
+        
+        Each color group becomes one STL file containing all tiles of that color
+        combined into a single compound.
+        
+        Args:
+            output_dir: Directory to save STL files.
+            base_name: Base name for output files.
+        
+        Returns:
+            List of created file paths.
+        """
+        from pathlib import Path
+        
+        out_path = Path(output_dir)
+        out_path.mkdir(parents=True, exist_ok=True)
+        
+        color_groups = self.group_by_color()
+        created_files = []
+        
+        # Map colors to readable names
+        color_names = {
+            (1.0, 0.0, 0.0): "red",
+            (0.0, 0.75, 0.0): "green",
+            (0.0, 0.0, 1.0): "blue",
+            (1.0, 1.0, 0.0): "yellow",
+            (1.0, 0.5, 0.0): "orange",
+            (0.5, 0.0, 0.5): "purple",
+        }
+        
+        for i, (color, tiles) in enumerate(color_groups.items()):
+            # Get color name or use index
+            color_name = color_names.get(color, f"color_{i}")
+            
+            # Combine all tiles of this color into one compound
+            solids = [tile.solid for tile in tiles]
+            compound = cq.Compound.makeCompound(solids)
+            
+            # Export
+            filename = out_path / f"{base_name}_{color_name}.stl"
+            cq.exporters.export(compound, str(filename))
+            created_files.append(str(filename))
+        
+        return created_files
 
 
 

@@ -127,7 +127,7 @@ class WythoffPolyhedron:
 
 			for i in range(n):
 				v1 = indicies[i]
-				c2 = indicies[(i+1) % n]
+				v2 = indicies[(i+1) % n]
 				edge = (min(v1, v2), max(v1, v2))
 				edge_to_faces[edge].append(face.face_id)
 
@@ -166,6 +166,285 @@ class WythoffPolyhedron:
 			coloring[face_id] = color
 
 		return coloring
+
+
+
+	def _get_face_centroids(self) -> dict[int, np.ndarray]:
+		"""Calculate the centroid for each face."""
+		centroids = {}
+		for face in self.faces:
+			coords = [self.vertices[i] for i in face.boundary_vertex_indices]
+			centroids[face.face_id] = np.mean(coords, axis=0)
+		return centroids
+
+	def _group_antipodal_faces(self) -> list[list[int]]:
+		"""
+		Group faces that are opposite (antipodal) to each other.
+		
+		Antipodal faces have centroids pointing in opposite directions.
+		These pairs can share a color for inversion symmetry.
+		"""
+		centroids = self._get_face_centroids()
+		face_ids = set(f.face_id for f in self.faces)
+		groups = []
+		visited = set()
+
+		for fid in face_ids:
+			if fid in visited:
+				continue
+			
+			center = centroids[fid]
+			match_found = None
+			
+			for candidate_id in face_ids:
+				if candidate_id == fid or candidate_id in visited:
+					continue
+				
+				# Check if centroids are antipodal (c + other ≈ 0)
+				if np.linalg.norm(center + centroids[candidate_id]) < 1e-4 * self.radius:
+					match_found = candidate_id
+					break
+			
+			if match_found is not None:
+				groups.append([fid, match_found])
+				visited.add(fid)
+				visited.add(match_found)
+			else:
+				groups.append([fid])
+				visited.add(fid)
+				
+		return groups
+
+
+	def _recursive_coloring_solver(
+		self,
+		group_index: int,
+		groups: list[list[int]], 
+		adjacency: dict[int, set[int]],
+		coloring: dict[int, int], 
+		max_colors: int
+	) -> bool:
+		"""Backtracking solver for graph coloring on groups of faces."""
+		if group_index == len(groups):
+			return True
+
+		current_group = groups[group_index]
+		
+		for color in range(max_colors):
+			is_safe = True
+			for face_id in current_group:
+				neighbors = adjacency.get(face_id, set())
+				for n_id in neighbors:
+					if n_id in coloring and coloring[n_id] == color:
+						is_safe = False
+						break
+				if not is_safe:
+					break
+			
+			if is_safe:
+				for face_id in current_group:
+					coloring[face_id] = color
+				
+				if self._recursive_coloring_solver(
+					group_index + 1, groups, adjacency, coloring, max_colors
+				):
+					return True
+				
+				for face_id in current_group:
+					del coloring[face_id]
+
+		return False
+
+
+	def color_faces_symmetric(self, max_colors: int = 4) -> dict[int, int]:
+		"""
+		Color faces with inversion symmetry (antipodal faces share color).
+		
+		Falls back to standard coloring if symmetric coloring is impossible.
+		
+		Returns a dict mapping face_id to color_index (0, 1, 2, ...).
+		"""
+		adjacency = self.get_face_adjacency()
+		
+		# Try strict symmetry (antipodal pairs share color)
+		symmetric_groups = self._group_antipodal_faces()
+		coloring: dict[int, int] = {}
+		
+		success = self._recursive_coloring_solver(
+			0, symmetric_groups, adjacency, coloring, max_colors
+		)
+		
+		if success:
+			return coloring
+		
+		# Fallback: solve without symmetry constraint
+		single_groups = [[f.face_id] for f in self.faces]
+		coloring = {}
+		
+		# Heuristic: most constrained first
+		single_groups.sort(
+			key=lambda g: len(adjacency.get(g[0], set())), 
+			reverse=True
+		)
+
+		success = self._recursive_coloring_solver(
+			0, single_groups, adjacency, coloring, max_colors
+		)
+		
+		if success:
+			return coloring
+		else:
+			raise ValueError(
+				f"Could not color polyhedron with {max_colors} colors"
+			)
+
+
+	def _get_geometric_independent_sets(
+		self, 
+		size_per_color: int, 
+		tolerance: float = 0.05
+	) -> list[set[int]]:
+		"""
+		Find all face sets that are independent and geometrically regular.
+		
+		A set is valid if:
+		1. No two faces share an edge (independent)
+		2. All pairwise centroid distances are equal (regular)
+		"""
+		centroids = self._get_face_centroids()
+		adjacency = self.get_face_adjacency()
+		face_ids = list(f.face_id for f in self.faces)
+		
+		valid_sets = []
+
+		def find_sets_recursive(current_set: list[int], start_index: int):
+			# Pruning: check independence immediately
+			if len(current_set) > 1:
+				last = current_set[-1]
+				neighbors = adjacency.get(last, set())
+				for other in current_set[:-1]:
+					if other in neighbors:
+						return
+
+			if len(current_set) == size_per_color:
+				# Check geometric regularity
+				if size_per_color == 1:
+					valid_sets.append(set(current_set))
+					return
+					
+				dists = []
+				c_vecs = [centroids[fid] for fid in current_set]
+				for i in range(len(c_vecs)):
+					for j in range(i + 1, len(c_vecs)):
+						dists.append(np.linalg.norm(c_vecs[i] - c_vecs[j]))
+				
+				# All distances should be nearly equal
+				if np.std(dists) < (np.mean(dists) * tolerance):
+					valid_sets.append(set(current_set))
+				return
+
+			for i in range(start_index, len(face_ids)):
+				find_sets_recursive(current_set + [face_ids[i]], i + 1)
+
+		find_sets_recursive([], 0)
+		
+		return valid_sets
+
+
+	def _solve_exact_cover(
+		self, 
+		candidate_sets: list[set[int]], 
+		target_colors: int
+	) -> dict[int, int] | None:
+		"""
+		Select target_colors disjoint sets that cover all faces (Exact Cover).
+		"""
+		all_faces = set(f.face_id for f in self.faces)
+		
+		def backtrack(
+			current_selection: list[set[int]], 
+			covered_faces: set[int],
+			start_index: int
+		):
+			if len(current_selection) == target_colors:
+				if covered_faces == all_faces:
+					return current_selection
+				return None
+			
+			for i in range(start_index, len(candidate_sets)):
+				candidate = candidate_sets[i]
+				if not candidate.isdisjoint(covered_faces):
+					continue
+				
+				result = backtrack(
+					current_selection + [candidate], 
+					covered_faces | candidate,
+					i + 1
+				)
+				if result:
+					return result
+			return None
+
+		solution_sets = backtrack([], set(), 0)
+		
+		if solution_sets:
+			coloring = {}
+			for color_idx, face_set in enumerate(solution_sets):
+				for face_id in face_set:
+					coloring[face_id] = color_idx
+			return coloring
+		return None
+
+
+	def color_faces_geometric(self, num_colors: int | None = None) -> dict[int, int]:
+		"""
+		Color faces with maximum geometric symmetry.
+		
+		Finds groups of faces that form regular patterns (equal centroid distances)
+		and assigns each group a color. This produces the classical symmetric
+		colorings (e.g., 5-coloring of icosahedron based on compound of 5 tetrahedra).
+		
+		Args:
+			num_colors: Number of colors to use. If None, automatically determined.
+		
+		Returns a dict mapping face_id to color_index (0, 1, 2, ...).
+		"""
+		num_faces = len(self.faces)
+		
+		# Auto-detect optimal number of colors for platonic solids
+		if num_colors is None:
+			if self.p == 3 and self.q == 3:    # Tetrahedron
+				num_colors = 4
+			elif self.p == 4 and self.q == 3:  # Cube
+				num_colors = 3
+			elif self.p == 3 and self.q == 4:  # Octahedron
+				num_colors = 2
+			elif self.p == 5 and self.q == 3:  # Dodecahedron
+				num_colors = 4
+			elif self.p == 3 and self.q == 5:  # Icosahedron
+				num_colors = 5
+			else:
+				num_colors = 4  # Default fallback
+
+		if num_faces % num_colors != 0:
+			# Can't divide evenly, fall back to symmetric
+			return self.color_faces_symmetric(num_colors)
+
+		size_per_color = num_faces // num_colors
+		
+		# Find all geometrically regular independent sets
+		candidates = self._get_geometric_independent_sets(size_per_color)
+		
+		if not candidates:
+			return self.color_faces_symmetric(num_colors)
+
+		# Solve exact cover problem
+		coloring = self._solve_exact_cover(candidates, num_colors)
+		
+		if coloring:
+			return coloring
+		else:
+			return self.color_faces_symmetric(num_colors)
 
 
 	def build(self) -> "WythoffPolyhedron":
