@@ -1,6 +1,7 @@
 #### wythoff.py
 
 from dataclasses import dataclass, field
+from collections import defaultdict
 import numpy as np
 from scipy.spatial import ConvexHull
 
@@ -34,6 +35,7 @@ class WythoffPolyhedron:
 
 		self.vertices: list[np.ndarray] = []
 		self.faces: list[PolyhedronFace] = []
+		self._face_adjacency: dict[unt, set[int]] | None = None
 
 
 	def _compute_reflection_normals(self) -> list[np.ndarray]:
@@ -109,6 +111,37 @@ class WythoffPolyhedron:
 
 		return list(visited.values())
 
+	def get_face_adjacency(self) -> dict[int, set[int]]:
+		"""
+		Compute which faces share an edge
+		"""
+		if self._face_adjacency is not None:
+			return self._face_adjacency
+
+		# Map each edge to the face that contains it
+		edge_to_faces: dict[tuple[int, int], list[int]] = defaultdict(list)
+
+		for face in self.faces:
+			indicies = face.boundary_vertex_indices
+			n = len(indicies)
+
+			for i in range(n):
+				v1 = indicies[i]
+				c2 = indicies[(i+1) % n]
+				edge = (min(v1, v2), max(v1, v2))
+				edge_to_faces[edge].append(face.face_id)
+
+		# Build adjacency from shared edges
+		adjacency: dict[int, set[int]] = defaultdict(set)
+
+		for edge, face_ids in edge_to_faces.items():
+			if len(face_ids) == 2:
+				f1, f2 = face_ids
+				adjacency[f1].add(f2)
+				adjacency[f2].add(f1)
+		self._face_adjacency = dict(adjacency)
+		return self._face_adjacency
+		
 
 	def build(self) -> "WythoffPolyhedron":
 		"""
@@ -134,4 +167,5 @@ class WythoffPolyhedron:
 			)
 
 		self.faces = faces
+		self._face_adjacency = None
 		return self
