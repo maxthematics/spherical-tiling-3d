@@ -124,6 +124,106 @@ class TiledSphere:
         
         return self
 
+
+    def _make_hole_pyramid_from_face(
+        self, 
+        face_index: int, 
+        inset: float
+    ) -> cq.Solid:
+        """
+        Create a smaller (inset) pyramid for cutting holes in frame tiles.
+        """
+        import numpy as np
+        
+        face = self.polyhedron.faces[face_index]
+        apex = cq.Vector(0, 0, 0)
+        
+        # Get original vertices
+        vertices = [self.polyhedron.vertices[idx] for idx in face.boundary_vertex_indices]
+        
+        # Calculate centroid
+        centroid = np.mean(vertices, axis=0)
+        
+        # Shrink vertices towards centroid
+        shrunk_vertices = []
+        for v in vertices:
+            direction = centroid - v
+            direction_norm = np.linalg.norm(direction)
+            if direction_norm > 0:
+                # Move vertex towards centroid by inset amount
+                shrunk = v + direction * (inset / direction_norm)
+            else:
+                shrunk = v
+            shrunk_vertices.append(shrunk)
+        
+        # Scale for pyramid (like in _make_pyramid_from_face)
+        base_points = []
+        for v in shrunk_vertices:
+            scaled = v * self.pyramid_scale
+            base_points.append(cq.Vector(*tuple(scaled)))
+        
+        n = len(base_points)
+        faces = []
+        
+        # Side faces
+        for i in range(n):
+            p1 = base_points[i]
+            p2 = base_points[(i + 1) % n]
+            triangle_wire = cq.Wire.makePolygon([apex, p1, p2, apex])
+            triangle_face = cq.Face.makeFromWires(triangle_wire)
+            faces.append(triangle_face)
+        
+        # Base face
+        base_wire = cq.Wire.makePolygon(base_points + [base_points[0]])
+        base_face = cq.Face.makeFromWires(base_wire)
+        faces.append(base_face)
+        
+        shell = cq.Shell.makeShell(faces)
+        solid = cq.Solid.makeSolid(shell)
+        
+        return solid
+    
+
+    def _make_frame_tile(
+        self, 
+        face_index: int, 
+        wall_thickness: float,
+        frame_width: float
+    ) -> cq.Solid:
+        """
+        Create a frame tile: hollow shell with a hole in the middle.
+        """
+        # Start with hollow tile
+        tile_solid = self._make_tile(
+            face_index, hollow=True, wall_thickness=wall_thickness
+        )
+        
+        # Create hole pyramid (inset by frame_width)
+        hole_pyramid = self._make_hole_pyramid_from_face(face_index, inset=frame_width)
+        
+        # Cut hole through tile
+        tile_solid = tile_solid.cut(hole_pyramid)
+        
+        return tile_solid
+
+    
+    def build_frame(
+        self, 
+        wall_thickness: float = 2.0,
+        frame_width: float = 3.0
+    ) -> "TiledSphere":
+        """
+        Build a frame/cage sphere with hollow tiles that have holes in the middle.
+        """
+        self.tiles = []
+        
+        for i in range(len(self.polyhedron.faces)):
+            solid = self._make_frame_tile(i, wall_thickness, frame_width)
+            tile = SphericalTile(solid=solid, tile_id=i)
+            self.tiles.append(tile)
+        
+        return self
+
         
     def apply_coloring(
         self,
