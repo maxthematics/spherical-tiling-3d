@@ -26,10 +26,10 @@ def main():
         
         # Polyeder und Tiled Sphere bauen
         poly = WythoffPolyhedron(p, q, radius=radius).build()
-        tiled = TiledSphere(poly, radius=radius).build()
+        tiled = TiledSphere(poly, radius=radius).build(hollow=True, wall_thickness=3.0)
         
         # Geometrisch-symmetrische Färbung anwenden
-        coloring = poly.color_faces_geometric()
+        coloring = poly.color_faces_symmetric()
         tiled.apply_coloring(coloring)
         
         # STLs nach Farbe exportieren

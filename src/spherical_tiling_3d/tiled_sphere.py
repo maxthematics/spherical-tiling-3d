@@ -79,27 +79,46 @@ class TiledSphere:
         return solid
 
     
-    def _make_tile(self, face_index: int) -> cq.Solid:
+    def _make_tile(
+        self, 
+        face_index: int,
+        hollow: bool = False,
+        wall_thickness: float = 2.0
+        ) -> cq.Solid:
         """
         Create a spherical tile by intersecting a pyramid with the sphere.
         """
-        sphere = cq.Solid.makeSphere(self.radius, angleDegrees1=-90, angleDegrees2=90)
+        outer_sphere = cq.Solid.makeSphere(
+            self.radius, angleDegrees1=-90, angleDegrees2=90
+        )
         pyramid = self._make_pyramid_from_face(face_index)
         
         # Intersection via double cut: pyramid ∩ sphere = pyramid - (pyramid - sphere)
-        tile_solid = pyramid.cut(pyramid.cut(sphere))
+        tile_solid = pyramid.cut(pyramid.cut(outer_sphere))
+
+        if hollow:
+            inner_radius = self.radius - wall_thickness
+            if inner_radius > 0:
+                inner_sphere = cq.Solid.makeSphere(
+                    inner_radius, angleDegrees1=-90, angleDegrees2=90
+                )
+                tile_solid = tile_solid.cut(inner_sphere)
         
         return tile_solid
 
     
-    def build(self) -> "TiledSphere":
+    def build(
+        self,
+        hollow: bool = False,
+        wall_thickness: float = 2.0
+    ) -> "TiledSphere":
         """
         Build all spherical tiles from the polyhedron faces.
         """
         self.tiles = []
         
         for i in range(len(self.polyhedron.faces)):
-            solid = self._make_tile(i)
+            solid = self._make_tile(i, hollow=hollow, wall_thickness=wall_thickness)
             tile = SphericalTile(solid=solid, tile_id=i)
             self.tiles.append(tile)
         
